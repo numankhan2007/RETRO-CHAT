@@ -1,0 +1,16 @@
+{
+  "name": "Retro Chat",
+  "short_name": "Retro Chat",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#FDF8EB",
+  "theme_color": "#4A5240",
+  "description": "A nostalgic real-time chat application.",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    }
+  ]
+}
