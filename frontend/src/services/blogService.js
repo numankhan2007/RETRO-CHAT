@@ -1,0 +1,16 @@
+import api from "./api";
+export const createPost = (data) => api.post("/blog", data);
+export const getFeed = (cursor) => api.get("/blog/feed" + (cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""));
+export const getSavedPosts = (cursor) => api.get("/blog/posts/saved" + (cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""));
+export const getMyPosts = (cursor) => api.get("/blog/posts/mine" + (cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""));
+export const getPost = (id) => api.get(`/blog/posts/${id}`);
+export const updatePost = (id, data) => api.put(`/blog/posts/${id}`, data);
+export const deletePost = (id) => api.delete(`/blog/posts/${id}`);
+export const getComments = (postId) => api.get(`/blog/posts/${postId}/comments`);
+export const addComment = (postId, data) => api.post(`/blog/posts/${postId}/comments`, data);
+export const likePost = (postId) => api.post(`/blog/posts/${postId}/like`);
+export const unlikePost = (postId) => api.delete(`/blog/posts/${postId}/like`);
+export const savePost = (postId) => api.post(`/blog/posts/${postId}/save`);
+export const unsavePost = (postId) => api.delete(`/blog/posts/${postId}/save`);
+export const deleteComment = (postId, commentId) => api.delete(`/blog/posts/${postId}/comments/${commentId}`);
+export const pinComment = (postId, commentId) => api.post(`/blog/posts/${postId}/comments/${commentId}/pin`);
