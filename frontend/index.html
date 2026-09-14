@@ -8,6 +8,16 @@
     <title>Retro Chat</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <script>
+      (function() {
+        try {
+          var theme = localStorage.getItem('retro_theme');
+          var font = localStorage.getItem('retro_font');
+          if (theme) document.documentElement.setAttribute('data-theme', theme);
+          if (font) document.documentElement.setAttribute('data-font', font);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
