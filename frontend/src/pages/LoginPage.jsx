@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { login, getMe } from "../services/authService";
 import { useAuth } from "../context/AuthContext";
@@ -11,6 +11,12 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const { loginUser } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (localStorage.getItem("token")) {
+      navigate("/chats", { replace: true });
+    }
+  }, [navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

@@ -1,7 +1,15 @@
-import { Link } from "react-router-dom";
+import { useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import Button from "../components/Button";
 
 export default function LandingPage() {
+  const navigate = useNavigate();
+  
+  useEffect(() => {
+    if (localStorage.getItem("token")) {
+      navigate("/chats", { replace: true });
+    }
+  }, [navigate]);
   return (
     <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center bg-parchment-100 px-4">
       <div className="max-w-2xl w-full mx-auto text-center flex flex-col items-center gap-6">
