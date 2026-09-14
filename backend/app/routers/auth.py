@@ -6,7 +6,8 @@ from sqlalchemy import func
 from app.core.deps import get_current_user, get_db
 from app.models.user import User
 from app.core.security import hash_password, verify_password, create_access_token
-from app.services.email_service import generate_otp, send_otp_email, otp_is_valid
+from app.services.email_service import generate_otp, send_otp_email
+from app.services.redis_service import store_otp, verify_and_consume_otp, clear_otp
 from app.schemas.user import UserRegister, UserLogin, OTPVerify, UserOut, ForgotPasswordRequest, VerifyResetOtpRequest, ResetPasswordRequest
 from app.schemas.token import Token
 
@@ -26,13 +27,13 @@ async def register(payload: UserRegister, db: Session = Depends(get_db)):
     otp = generate_otp()
     user = User(
         email=payload.email, name=payload.name, username=payload.username,
-        password_hash=hash_password(payload.password), is_verified=False,
-        otp_code=otp, otp_expires_at=datetime.utcnow() + timedelta(minutes=10),
-        otp_attempts=0,
+        password_hash=hash_password(payload.password), is_verified=False
     )
     db.add(user)
     db.commit()
     db.refresh(user)
+    
+    store_otp(user.email, otp)
     await send_otp_email(payload.email, otp)
     return user
 
@@ -42,18 +43,10 @@ def verify_otp(payload: OTPVerify, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(404, "User not found")
 
-    if user.otp_attempts >= MAX_OTP_ATTEMPTS:
-        raise HTTPException(429, "Too many incorrect attempts. Request a new code.")
-
-    if not otp_is_valid(user.otp_code, user.otp_expires_at, payload.otp):
-        user.otp_attempts += 1
-        db.commit()
-        raise HTTPException(400, "Invalid or expired code")
+    if not verify_and_consume_otp(user.email, payload.otp, max_attempts=MAX_OTP_ATTEMPTS, consume=True):
+        raise HTTPException(400, "Invalid, expired, or too many incorrect attempts")
 
     user.is_verified = True
-    user.otp_code = None
-    user.otp_expires_at = None
-    user.otp_attempts = 0
     db.commit()
     return {"message": "Email verified successfully"}
 
@@ -69,10 +62,7 @@ async def resend_otp(payload: ResendOTPRequest, db: Session = Depends(get_db)):
         raise HTTPException(400, "Email already verified")
 
     otp = generate_otp()
-    user.otp_code = otp
-    user.otp_expires_at = datetime.utcnow() + timedelta(minutes=10)
-    user.otp_attempts = 0  # a fresh code means a fresh set of attempts
-    db.commit()
+    store_otp(user.email, otp)
     await send_otp_email(payload.email, otp)
     return {"message": "A new verification code has been sent"}
 
@@ -83,15 +73,10 @@ async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(
         (func.lower(User.username) == func.lower(payload.identifier))
     ).first()
     if not user:
-        # To prevent user enumeration, we still return success or a generic message.
-        # But to be helpful in this app, we return a 404.
         raise HTTPException(404, "User not found")
         
     otp = generate_otp()
-    user.otp_code = otp
-    user.otp_expires_at = datetime.utcnow() + timedelta(minutes=10)
-    user.otp_attempts = 0
-    db.commit()
+    store_otp(user.email, otp)
     await send_otp_email(user.email, otp)
     return {"message": "A password reset code has been sent to your email", "email": user.email}
 
@@ -105,15 +90,10 @@ def verify_reset_otp(payload: VerifyResetOtpRequest, db: Session = Depends(get_d
     if not user:
         raise HTTPException(404, "User not found")
         
-    if user.otp_attempts >= MAX_OTP_ATTEMPTS:
-        raise HTTPException(429, "Too many incorrect attempts. Request a new code.")
+    # We do NOT consume here because the reset-password endpoint needs to verify it again
+    if not verify_and_consume_otp(user.email, payload.otp, max_attempts=MAX_OTP_ATTEMPTS, consume=False):
+        raise HTTPException(400, "Invalid, expired, or too many incorrect attempts")
 
-    if not otp_is_valid(user.otp_code, user.otp_expires_at, payload.otp):
-        user.otp_attempts += 1
-        db.commit()
-        raise HTTPException(400, "Invalid or expired code")
-
-    # Do not clear the OTP here, as we need it for the actual reset-password endpoint.
     return {"message": "OTP is valid"}
 
 @router.post("/reset-password")
@@ -129,18 +109,11 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
     if not user:
         raise HTTPException(404, "User not found")
         
-    if user.otp_attempts >= MAX_OTP_ATTEMPTS:
-        raise HTTPException(429, "Too many incorrect attempts. Request a new code.")
-
-    if not otp_is_valid(user.otp_code, user.otp_expires_at, payload.otp):
-        user.otp_attempts += 1
-        db.commit()
-        raise HTTPException(400, "Invalid or expired code")
+    # This time we consume the OTP
+    if not verify_and_consume_otp(user.email, payload.otp, max_attempts=MAX_OTP_ATTEMPTS, consume=True):
+        raise HTTPException(400, "Invalid, expired, or too many incorrect attempts")
 
     user.password_hash = hash_password(payload.new_password)
-    user.otp_code = None
-    user.otp_expires_at = None
-    user.otp_attempts = 0
     db.commit()
     return {"message": "Password has been reset successfully"}
 

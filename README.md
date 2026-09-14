@@ -116,10 +116,11 @@ mindmap
       Python 3.11+
       FastAPI
       SQLAlchemy
-      Uvicorn
-      Passlib
+      Gunicorn + Uvicorn
+      Redis PubSub
     Infrastructure
       Supabase Postgres
+      Redis
       Cloudflare R2
       SMTP
 ```

@@ -5,7 +5,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-app = FastAPI(title="Retro Chat API")
+from contextlib import asynccontextmanager
+from app.core.ws_manager import manager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await manager.connect_redis()
+    yield
+
+app = FastAPI(title="Retro Chat API", lifespan=lifespan)
 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -17,7 +25,7 @@ frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=".*",
+    allow_origins=[frontend_origin],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

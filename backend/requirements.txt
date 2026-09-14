@@ -10,3 +10,5 @@ pydantic-settings
 sqlalchemy
 slowapi
 boto3
+gunicorn
+redis

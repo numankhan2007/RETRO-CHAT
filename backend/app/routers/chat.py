@@ -29,7 +29,7 @@ def _get_or_create_conversation(db: Session, user_id_1: int, user_id_2: int) -> 
     return convo
 
 @router.get("/conversations", response_model=list[ConversationOut])
-def list_conversations(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def list_conversations(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     convos = db.query(Conversation).filter(
         or_(Conversation.user_a_id == current_user.id, Conversation.user_b_id == current_user.id)
     ).all()
@@ -81,7 +81,7 @@ def list_conversations(current_user: User = Depends(get_current_user), db: Sessi
                 Message.sent_at > last_read_msg.sent_at if last_read_msg else True
             ).scalar() or 0
 
-        is_online = manager.is_online(friend.id)
+        is_online = await manager.is_online(friend.id)
         
         a, b = sorted([current_user.id, friend_id])
         friendship = friendships_dict.get((a, b))
@@ -258,4 +258,4 @@ async def chat_websocket(websocket: WebSocket):
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
-        manager.disconnect(user.id, websocket)
+        await manager.disconnect(user.id, websocket)
