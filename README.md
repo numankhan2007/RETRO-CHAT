@@ -79,6 +79,9 @@ graph TD
 ### 💬 Real-Time Chat Engine
 
 * **WebSockets:** Lightning-fast, instant message delivery.
+* **Group Chats:** Create groups with 3+ friends, featuring full admin controls (manage members, promote admins, update group info, and upload custom group avatars to Cloudflare R2).
+* **Unified Inbox:** Seamlessly manage 1-on-1 and group conversations in a single chronological view with visual avatar indicators.
+* **Stylish Fonts:** Format your text with custom Unicode fraktur fonts directly in chat using the `/stylish` command or slash command menu.
 * **Read Receipts:** Track when messages are delivered and read.
 * **Typing Indicators:** See when friends are actively typing.
 
@@ -235,6 +238,9 @@ erDiagram
     USERS ||--o{ COMMENTS : writes
     USERS ||--o{ MESSAGES : sends
     USERS ||--o{ FRIENDSHIPS : requests
+    USERS ||--o{ GROUP_MEMBERS : joins
+    GROUPS ||--o{ GROUP_MEMBERS : contains
+    GROUPS ||--o{ MESSAGES : holds
     POSTS ||--o{ COMMENTS : contains
     POSTS ||--o{ POST_LIKES : receives
     CONVERSATIONS ||--o{ MESSAGES : holds
@@ -246,6 +252,18 @@ erDiagram
         string password_hash
         string avatar_url
     }
+    GROUPS {
+        int id PK
+        int created_by FK
+        string name
+        string bio
+        string avatar_url
+    }
+    GROUP_MEMBERS {
+        int group_id PK,FK
+        int user_id PK,FK
+        string role
+    }
     POSTS {
         int id PK
         int author_id FK
@@ -256,6 +274,7 @@ erDiagram
     MESSAGES {
         int id PK
         int conversation_id FK
+        int group_id FK
         int sender_id FK
         text content
         timestamp created_at
