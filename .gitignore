@@ -1,0 +1,79 @@
+# -------------------------------------------------------------------
+# Backend (Python / FastAPI)
+# -------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.venv/
+venv/
+ENV/
+
+# -------------------------------------------------------------------
+# Frontend (Node / React / Vite)
+# -------------------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.pnpm-store/
+frontend/dist/
+frontend/dist-ssr/
+*.local
+
+# -------------------------------------------------------------------
+# Environments and Secrets (CRITICAL)
+# -------------------------------------------------------------------
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+*.pem
+credentials.json
+client_secret.json
+
+# -------------------------------------------------------------------
+# OS and IDEs
+# -------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+
+# -------------------------------------------------------------------
+# Project Specific
+# -------------------------------------------------------------------
+backend/logs/
+*.log
