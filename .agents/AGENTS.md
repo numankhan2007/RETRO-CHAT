@@ -24,7 +24,7 @@ These rules are non-negotiable for the Retro Chat project:
    * **Hidden Usernames**: Usernames must be hidden until a friend request is accepted (enforced at the API level).
    * **Auth**: Email and password only (no phone numbers). Auth via JWT.
    * **No Engagement Hacking**: No unread-count guilt patterns, streaks, or growth-hacking copy.
-   * **Scope limits**: No Android/mobile apps, no offline messaging, no group chats, no voice/video calling.
+    * **Scope limits**: no offline messaging,  no voice/video calling.
 5. **General Practices**:
 
    * Favor clarity, correctness, and simplicity over speculative scale or premature abstraction.

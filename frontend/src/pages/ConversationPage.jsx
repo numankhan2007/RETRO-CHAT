@@ -4,7 +4,9 @@ import { getMessages, sendMessage, markAsRead, pinMessage, deleteMessage, editMe
 import { getFriends, updateFriendPreferences } from "../services/friendsService";
 import { blockUser } from "../services/blockService";
 import { useChatSocket } from "../context/ChatSocketContext";
-import { renderFormattedText, stripFormatting } from "../utils/textUtils";
+import { useAuth } from "../context/AuthContext";
+import { getGroup, getGroupMessages, sendGroupMessage, removeGroupMember } from "../services/chatService";
+import { renderFormattedText, stripFormatting, toStylishText } from "../utils/textUtils";
 import MessageBubble from "../components/MessageBubble";
 import EmojiPicker from "../components/EmojiPicker";
 import FormatToolbar from "../components/FormatToolbar";
@@ -12,9 +14,16 @@ import SlashCommandMenu from "../components/SlashCommandMenu";
 import Button from "../components/Button";
 import Avatar from "../components/Avatar";
 import ConfirmModal from "../components/ConfirmModal";
+import GroupSettingsModal from "../components/GroupSettingsModal";
 
 export default function ConversationPage() {
-  const { friendId } = useParams();
+  const { friendId, groupId } = useParams();
+  const isGroup = !!groupId;
+  const targetId = isGroup ? groupId : friendId;
+  const { user: currentUser } = useAuth();
+  const [group, setGroup] = useState(null);
+  const [membersMap, setMembersMap] = useState({});
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const navigate = useNavigate();
   const [messages, setMessages] = useState([]);
   const [friend, setFriend] = useState(null);
@@ -55,7 +64,8 @@ export default function ConversationPage() {
     if (!hasMore || loadingMore || messages.length === 0) return;
     setLoadingMore(true);
     const cursor = messages[0].sent_at;
-    getMessages(friendId, cursor).then(res => {
+    const req = isGroup ? getGroupMessages(targetId, cursor) : getMessages(targetId, cursor);
+    req.then(res => {
       if (res.data.length === 0) {
         setHasMore(false);
       } else {
@@ -66,30 +76,48 @@ export default function ConversationPage() {
   };
 
   useEffect(() => {
-    getFriends().then(res => {
-      const f = res.data.find(x => String(x.id) === String(friendId));
-      if (f) setFriend(f);
-    });
-  }, [friendId]);
+    if (isGroup) {
+      getGroup(targetId).then(res => {
+        setGroup(res.data);
+        const mmap = {};
+        res.data.members.forEach(m => mmap[m.user_id] = m);
+        setMembersMap(mmap);
+      });
+    } else {
+      getFriends().then(res => {
+        const f = res.data.find(x => String(x.id) === String(targetId));
+        if (f) {
+           setFriend(f);
+           setMembersMap({ [f.id]: f });
+        }
+      });
+    }
+  }, [targetId, isGroup]);
 
   useEffect(() => { 
     setHasMore(true);
-    getMessages(friendId).then((res) => {
+    const req = isGroup ? getGroupMessages(targetId) : getMessages(targetId);
+    req.then((res) => {
       setMessages(res.data);
       if (res.data.length < 50) setHasMore(false);
-      markAsRead(friendId);
+      if (!isGroup) markAsRead(targetId);
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "auto" }), 50);
     }); 
-  }, [friendId]);
+  }, [targetId, isGroup]);
 
   useEffect(() => {
     if (!lastMessage) return;
     
     // Determine the current conversation ID if possible
-    const currentConvoId = messages.length > 0 ? messages[0].conversation_id : null;
-    const isCurrentConvo = currentConvoId 
-      ? String(lastMessage.conversation_id) === String(currentConvoId)
-      : (lastMessage.message && String(lastMessage.message.sender_id) === String(friendId));
+    let isCurrentConvo = false;
+    if (isGroup) {
+       isCurrentConvo = String(lastMessage.group_id) === String(targetId);
+    } else {
+       const currentConvoId = messages.length > 0 ? messages[0].conversation_id : null;
+       isCurrentConvo = currentConvoId 
+         ? String(lastMessage.conversation_id) === String(currentConvoId)
+         : (lastMessage.message && String(lastMessage.message.sender_id) === String(targetId));
+    }
 
     if (!isCurrentConvo) return;
 
@@ -102,8 +130,8 @@ export default function ConversationPage() {
         }
         return [...prev, msg];
       });
-      if (String(msg.sender_id) === String(friendId)) {
-        markAsRead(friendId);
+      if (String(msg.sender_id) !== String(currentUser?.id)) {
+        if (!isGroup) markAsRead(targetId);
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
       }
     } else if (lastMessage.type === "delete_message") {
@@ -135,17 +163,18 @@ export default function ConversationPage() {
 
   const handleSend = async (content, message_type = "text") => {
     if (!content.trim()) return;
+    if (content.startsWith('/stylish ')) {
+      content = toStylishText(content.replace('/stylish ', ''));
+    }
+    
     try {
       if (editingMessage) {
-        const res = await editMessage(friendId, editingMessage.id, content);
+        const res = await editMessage(targetId, editingMessage.id, content);
         setMessages((prev) => prev.map((m) => (m.id === res.data.id ? res.data : m)));
         setEditingMessage(null);
       } else {
-        const res = await sendMessage(friendId, { 
-          content, 
-          message_type, 
-          reply_to_id: replyingTo?.id || null 
-        });
+        const payload = { content, message_type, reply_to_id: replyingTo?.id || null };
+        const res = await (isGroup ? sendGroupMessage(targetId, payload) : sendMessage(targetId, payload));
         setMessages((prev) => [...prev, res.data]);
         setReplyingTo(null);
       }
@@ -161,7 +190,7 @@ export default function ConversationPage() {
 
   const handlePin = async (message) => {
     try {
-      const res = await pinMessage(friendId, message.id);
+      const res = await pinMessage(targetId, message.id);
       // Wait, we don't need to manually update state here because the websocket will echo it back.
       // Actually we are doing it manually for instant feedback:
       setMessages((prev) => prev.map((m) => (m.id === message.id ? res.data : m)));
@@ -187,7 +216,7 @@ export default function ConversationPage() {
   const confirmDelete = async () => {
     if (!confirmDeleteMessage) return;
     try {
-      await deleteMessage(friendId, confirmDeleteMessage.id);
+      await deleteMessage(targetId, confirmDeleteMessage.id);
       setMessages((prev) => prev.map((m) => (m.id === confirmDeleteMessage.id ? { ...m, content: "", is_deleted: true, is_pinned: false } : m)));
     } catch (err) {
       console.error(err);
@@ -203,7 +232,7 @@ export default function ConversationPage() {
   const handleMute = async () => {
     setShowMenu(false);
     try {
-      await updateFriendPreferences(friendId, { is_muted: true });
+      await updateFriendPreferences(targetId, { is_muted: true });
       alert("Chat muted!");
     } catch (e) {
       console.error("Failed to mute", e);
@@ -217,7 +246,7 @@ export default function ConversationPage() {
 
   const executeBlock = async () => {
     try {
-      await blockUser(friendId);
+      await blockUser(targetId);
       navigate("/chats");
     } catch (e) {
       console.error("Failed to block", e);
@@ -232,6 +261,12 @@ export default function ConversationPage() {
     window.addEventListener("click", handleClick);
     return () => window.removeEventListener("click", handleClick);
   }, []);
+  
+  useEffect(() => {
+    const openSettings = () => setIsSettingsOpen(true);
+    window.addEventListener("open-group-settings", openSettings);
+    return () => window.removeEventListener("open-group-settings", openSettings);
+  }, []);
 
   const handleClear = () => {
     setShowMenu(false);
@@ -240,17 +275,21 @@ export default function ConversationPage() {
 
   return (
     <div className="flex flex-col h-full relative bg-parchment-050">
-      {friend && (
+      {(friend || group) && (
         <div className="h-[72px] flex items-center justify-between bg-parchment-100 border-b border-accent-900 px-6 shrink-0">
-          <div className="flex items-center gap-4">
-            <button className="md:hidden p-2 -ml-3 text-accent-900 hover:bg-accent-900/10 rounded-full" onClick={() => navigate("/chats")}>
+          <div className="flex items-center gap-4 cursor-pointer hover:bg-accent-900/5 p-2 -ml-2 rounded" onClick={() => isGroup ? window.dispatchEvent(new CustomEvent('open-group-settings')) : null}>
+            <button className="md:hidden p-2 -ml-3 text-accent-900 hover:bg-accent-900/10 rounded-full" onClick={(e) => { e.stopPropagation(); navigate("/chats"); }}>
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
             </button>
-            <Avatar username={friend.username} avatarUrl={friend.avatar_url} />
+            <Avatar username={isGroup ? group.name : friend.username} url={isGroup ? group.avatar_url : friend.avatar_url} isGroup={isGroup} />
             <div>
-              <h2 className="font-bold text-lg leading-tight">{friend.name}</h2>
-              <p className="text-xs text-ink-muted mb-1">{friend.username}</p>
-              {friend.bio && <p className="text-xs text-ink-muted/70">{friend.bio}</p>}
+              <h2 className="font-bold text-lg leading-tight flex items-center gap-2">
+                {isGroup ? group.name : friend.name}
+                {isGroup && <span className="text-[10px] bg-accent-200 px-1 rounded uppercase tracking-widest border border-accent-800">Group</span>}
+              </h2>
+              <p className="text-xs text-ink-muted mb-1">{isGroup ? `${group.members?.length || 0} members` : friend.username}</p>
+              {!isGroup && friend.bio && <p className="text-xs text-ink-muted/70">{friend.bio}</p>}
+              {isGroup && group.bio && <p className="text-xs text-ink-muted/70 truncate max-w-[200px]">{group.bio}</p>}
             </div>
           </div>
           
@@ -323,7 +362,7 @@ export default function ConversationPage() {
                   }}
                 >
                   <span className="text-[10px] text-ink-muted block mb-1">
-                    {String(m.sender_id) === String(friendId) ? friend?.name : "You"} • {new Date(m.sent_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    {String(m.sender_id) === String(currentUser?.id) ? "You" : (membersMap[m.sender_id]?.name || "Unknown")} • {new Date(m.sent_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   </span>
                   <p className="text-sm text-ink break-words whitespace-pre-wrap">{stripFormatting(m.content)}</p>
                 </div>
@@ -335,10 +374,10 @@ export default function ConversationPage() {
 
       <div className="flex-1 overflow-y-auto px-6 py-6 custom-scrollbar flex flex-col">
         {messages.map((m, index) => {
-          const isMine = String(m.sender_id) !== String(friendId);
+          const isMine = String(m.sender_id) === String(currentUser?.id);
           const replyMsg = m.reply_to_id ? messages.find(msg => msg.id === m.reply_to_id) : null;
           const replyToMessage = replyMsg ? {
-            senderName: String(replyMsg.sender_id) === String(friendId) ? friend?.name : "You",
+            senderName: String(replyMsg.sender_id) === String(currentUser?.id) ? "You" : (membersMap[replyMsg.sender_id]?.name || "Unknown"),
             content: replyMsg.content
           } : null;
 
@@ -354,6 +393,7 @@ export default function ConversationPage() {
               className={`transition-colors duration-1000 ${highlightedMsgId === m.id ? 'bg-accent-900/20 -mx-4 px-4 py-2 rounded' : ''}`}
             >
               <MessageBubble
+                sender={membersMap[m.sender_id]}
                 content={m.content}
                 isMine={isMine}
                 timestamp={new Date(m.sent_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -378,7 +418,7 @@ export default function ConversationPage() {
           <div className="flex items-center justify-between bg-parchment-050 border-t border-accent-900 px-4 py-2 text-sm text-ink-muted">
             <div className="truncate pr-4 border-l-2 border-accent-800 pl-2">
               <span className="font-bold text-ink text-xs block mb-0.5">
-                {editingMessage ? "Editing Message" : `Replying to ${String(replyingTo?.sender_id) === String(friendId) ? friend?.name : "yourself"}`}
+                {editingMessage ? "Editing Message" : `Replying to ${String(replyingTo?.sender_id) === String(currentUser?.id) ? "yourself" : (membersMap[replyingTo?.sender_id]?.name || "Unknown")}`}
               </span>
               <span className="truncate block">{renderFormattedText((editingMessage || replyingTo).content)}</span>
             </div>
@@ -427,7 +467,7 @@ export default function ConversationPage() {
       </div>
 
       {contextMenu && (() => {
-        const isMineMenu = String(contextMenu.message.sender_id) !== String(friendId);
+        const isMineMenu = String(contextMenu.message.sender_id) === String(currentUser?.id);
         return (
           <div 
             className="fixed z-[100] bg-parchment-050 border border-accent-900 rounded shadow-md w-32 overflow-hidden"
@@ -509,6 +549,20 @@ export default function ConversationPage() {
         onCancel={() => setConfirmBlock(false)}
         confirmText="Block"
       />
+      
+      {isGroup && group && (
+        <GroupSettingsModal 
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          group={group}
+          onUpdate={(g) => {
+            setGroup(g);
+            const mmap = {};
+            g.members.forEach(m => mmap[m.user_id] = m);
+            setMembersMap(mmap);
+          }}
+        />
+      )}
     </div>
   );
 }

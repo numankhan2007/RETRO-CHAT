@@ -1,7 +1,8 @@
 import React, { useState, useRef, memo } from 'react';
 import { renderFormattedText } from '../utils/textUtils';
+import Avatar from './Avatar';
 
-const MessageBubble = ({ content, isMine, timestamp, onReply, replyToMessage, onContextMenu, isPinned, isEdited, isDeleted }) => {
+const MessageBubble = ({ content, isMine, sender, timestamp, onReply, replyToMessage, onContextMenu, isPinned, isEdited, isDeleted }) => {
   const [translateX, setTranslateX] = useState(0);
   const touchStartX = useRef(null);
   const longPressTimer = useRef(null);
@@ -54,9 +55,14 @@ const MessageBubble = ({ content, isMine, timestamp, onReply, replyToMessage, on
 
   return (
     <div 
-      className={`flex ${isMine ? "justify-end" : "justify-start"} mb-2 group retro-slide-in select-none`}
+      className={`flex ${isMine ? "justify-end" : "justify-start"} mb-2 group retro-slide-in select-none gap-2 items-end`}
       onContextMenu={onContextMenu}
     >
+      {!isMine && sender && (
+        <div className="shrink-0 mb-1">
+          <Avatar url={sender.avatar_url} username={sender.username} size="sm" />
+        </div>
+      )}
       <div 
         className={`max-w-[70%] px-4 py-2 rounded-lg font-mono text-sm touch-pan-y
         ${translateX === 0 ? "transition-transform group-hover:-translate-y-0.5" : ""}
@@ -68,6 +74,9 @@ const MessageBubble = ({ content, isMine, timestamp, onReply, replyToMessage, on
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
+        {!isMine && sender && (
+          <div className="text-[10px] font-bold text-accent-700 mb-1 truncate">{sender.name}</div>
+        )}
         
         {replyToMessage && !isDeleted && (
           <div className="mb-2 p-2 border-l-2 border-current opacity-70 bg-black/5 rounded text-xs pointer-events-none">

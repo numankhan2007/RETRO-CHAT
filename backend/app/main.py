@@ -31,7 +31,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from app.routers import auth, friends, chat, blog, users, notifications, blocks
+from app.routers import auth, friends, chat, blog, users, notifications, blocks, group
 
 @app.get("/health")
 def health_check():
@@ -44,3 +44,4 @@ app.include_router(blog.router)
 app.include_router(users.router)
 app.include_router(notifications.router)
 app.include_router(blocks.router)
+app.include_router(group.router)

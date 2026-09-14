@@ -9,7 +9,8 @@ const FORMATTING_OPTIONS = [
   { label: 'Quote', syntax: '> text' },
   { label: 'Link', syntax: '[text](url)' },
   { label: 'Bullet List', syntax: '- text' },
-  { label: 'Numbered List', syntax: '1. text' }
+  { label: 'Numbered List', syntax: '1. text' },
+  { label: 'Stylish Text', syntax: '/stylish text' }
 ];
 
 export default function SlashCommandMenu({ onSelect }) {

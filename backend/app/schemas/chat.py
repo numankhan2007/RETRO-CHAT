@@ -8,7 +8,8 @@ class MessageCreate(BaseModel):
 
 class MessageOut(BaseModel):
     id: int
-    conversation_id: int
+    conversation_id: int | None = None
+    group_id: int | None = None
     sender_id: int
     content: str
     message_type: str
@@ -22,11 +23,12 @@ class MessageOut(BaseModel):
         from_attributes = True
 
 class ConversationOut(BaseModel):
-    id: int
-    friend_id: int
-    friend_username: str
-    friend_name: str
-    friend_avatar_url: str | None = None
+    id: int # conversation.id or group.id
+    target_id: int # friend_id or group_id
+    is_group: bool = False
+    name: str # friend_name or group_name
+    username: str | None = None # friend_username or None for groups
+    avatar_url: str | None = None
     last_message: str | None = None
     last_message_sender_id: int | None = None
     last_message_at: datetime | None = None

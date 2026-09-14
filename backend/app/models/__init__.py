@@ -10,6 +10,8 @@ from app.models.saved_post import SavedPost
 from app.models.read_receipt import ReadReceipt
 from app.models.notification import Notification
 from app.models.block import Block
+from app.models.group import Group
+from app.models.group_member import GroupMember
 
 __all__ = [
     "User",
@@ -24,4 +26,6 @@ __all__ = [
     "ReadReceipt",
     "Notification",
     "Block",
+    "Group",
+    "GroupMember",
 ]

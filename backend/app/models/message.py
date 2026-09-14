@@ -6,7 +6,8 @@ class Message(Base):
     __tablename__ = "messages"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    conversation_id = Column(Integer, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=True, index=True)
+    group_id = Column(Integer, ForeignKey("groups.id", ondelete="CASCADE"), nullable=True, index=True)
     sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     content = Column(String(4000), nullable=False)
     message_type = Column(String(20), default="text")
@@ -17,3 +18,4 @@ class Message(Base):
     is_deleted = Column(Boolean, default=False)
 
     reply_to = relationship("Message", remote_side=[id])
+    group = relationship("Group", back_populates="messages")

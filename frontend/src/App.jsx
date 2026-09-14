@@ -48,6 +48,7 @@ export default function App() {
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/chats" element={<Protected><ChatsLayout /></Protected>}>
               <Route index element={null} />
+              <Route path="group/:groupId" element={<ConversationPage />} />
               <Route path=":friendId" element={<ConversationPage />} />
             </Route>
             <Route path="/blog" element={<Protected><BlogFeedPage /></Protected>} />
