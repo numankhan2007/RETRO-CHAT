@@ -3,7 +3,7 @@
   <img src="frontend/public/logo.svg" width="150" height="150" />
   <br />
   
-  <img src="https://capsule-render.vercel.app/api?type=transparent&color=timeGradient&height=120&section=header&text=RETRO%20CHAT&fontSize=80&animation=twinkling" alt="RETRO CHAT" />
+  <img src="https://capsule-render.vercel.app/api?type=transparent&color=00FFCC&fontColor=00FFCC&height=120&section=header&text=RETRO%20CHAT&fontSize=80&animation=twinkling" alt="RETRO CHAT" />
   
   <a href="https://git.io/typing-svg"><img src="https://readme-typing-svg.herokuapp.com?font=Fira+Code&weight=600&size=24&pause=1000&color=00FFCC&center=true&vCenter=true&width=600&lines=A+Next-Gen%2C+Real-Time+Communication+Platform;Chronological.+Authentic.+Lightning+Fast.;Powered+by+FastAPI+%2B+React+%2B+WebSockets" alt="Typing SVG" /></a>
 
@@ -268,5 +268,5 @@ erDiagram
 
 <div align="center">
   <br />
-  <img src="https://capsule-render.vercel.app/api?type=waving&color=timeGradient&height=150&section=footer&text=Thank%20You%20for%20Choosing%20Retro%20Chat&fontSize=40&fontAlignY=70&animation=fadeIn" width="100%" />
+  <img src="https://capsule-render.vercel.app/api?type=waving&color=00FFCC&fontColor=0d1117&height=150&section=footer&text=Thank%20You%20for%20Choosing%20Retro%20Chat&fontSize=40&fontAlignY=70&animation=fadeIn" width="100%" />
 </div>
