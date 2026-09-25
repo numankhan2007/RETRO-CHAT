@@ -18,6 +18,7 @@ from app.schemas.chat import MessageCreate, MessageOut
 from app.models.message import Message
 from app.core.ws_manager import manager
 from app.routers.users import get_s3_client
+from app.services.friendship_service import are_friends
 
 router = APIRouter(prefix="/groups", tags=["groups"])
 
@@ -97,6 +98,9 @@ def add_member(group_id: int, user_id: int, current_user: User = Depends(get_cur
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
         
+    if not are_friends(db, current_user.id, user_id):
+        raise HTTPException(status_code=403, detail="You can only add friends to a group")
+        
     existing = db.query(GroupMember).filter(GroupMember.group_id == group_id, GroupMember.user_id == user_id).first()
     if existing:
         raise HTTPException(status_code=400, detail="User is already a member")
@@ -120,6 +124,12 @@ def remove_member(group_id: int, user_id: int, current_user: User = Depends(get_
     member = db.query(GroupMember).filter(GroupMember.group_id == group_id, GroupMember.user_id == user_id).first()
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
+        
+    if member.role == "admin":
+        other_admins = db.query(GroupMember).filter(GroupMember.group_id == group_id, GroupMember.role == "admin", GroupMember.user_id != user_id).count()
+        other_members = db.query(GroupMember).filter(GroupMember.group_id == group_id, GroupMember.user_id != user_id).count()
+        if other_admins == 0 and other_members > 0:
+            raise HTTPException(status_code=400, detail="Promote another member to admin before leaving")
         
     db.delete(member)
     db.commit()
@@ -147,6 +157,12 @@ def update_role(group_id: int, user_id: int, role: str = Body(..., embed=True), 
     member = db.query(GroupMember).filter(GroupMember.group_id == group_id, GroupMember.user_id == user_id).first()
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
+        
+    if member.role == "admin" and role != "admin":
+        other_admins = db.query(GroupMember).filter(GroupMember.group_id == group_id, GroupMember.role == "admin", GroupMember.user_id != user_id).count()
+        other_members = db.query(GroupMember).filter(GroupMember.group_id == group_id, GroupMember.user_id != user_id).count()
+        if other_admins == 0 and other_members > 0:
+            raise HTTPException(status_code=400, detail="Promote another member to admin before leaving")
         
     member.role = role
     db.commit()

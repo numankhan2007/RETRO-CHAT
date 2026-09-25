@@ -23,6 +23,7 @@ export default function ChatsListPage() {
   useEffect(() => { 
     getConversations()
       .then((res) => setConversations(res.data))
+      .catch(err => console.error("Failed to fetch conversations:", err))
       .finally(() => setLoading(false));
   }, []);
 

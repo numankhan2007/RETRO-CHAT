@@ -111,11 +111,6 @@ async def list_conversations(current_user: User = Depends(get_current_user), db:
         group_last_messages = db.query(Message).join(group_last_msgs_subq, and_(Message.group_id == group_last_msgs_subq.c.group_id, Message.sent_at == group_last_msgs_subq.c.max_sent)).all()
         group_last_messages_dict = {m.group_id: m for m in group_last_messages}
         
-        # Read receipts for groups: We will reuse the ReadReceipt table but need a group_id column or something?
-        # Wait, ReadReceipt doesn't have group_id! It only has conversation_id. 
-        # I need to update ReadReceipt model or create GroupReadReceipt.
-        # For now, just set unread_count = 0 for groups to keep it simple, or I can add group_id to ReadReceipt.
-        # Let's just do 0 unread for now in groups.
         
         for gm in group_memberships:
             g = groups_dict.get(gm.group_id)
@@ -133,7 +128,7 @@ async def list_conversations(current_user: User = Depends(get_current_user), db:
                 last_message=last_msg.content if last_msg else None,
                 last_message_sender_id=last_msg.sender_id if last_msg else None,
                 last_message_at=last_msg.sent_at if last_msg else None,
-                unread_count=0, # TODO: implement group receipts
+                unread_count=0,
                 is_online=False,
                 is_muted=False
             ))
@@ -160,13 +155,6 @@ def get_messages(friend_id: int, cursor: Optional[datetime] = Query(None), limit
 async def send_message(request: Request, friend_id: int, payload: MessageCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not are_friends(db, current_user.id, friend_id):
         raise HTTPException(403, "You can only message friends")
-        
-    block = db.query(Block).filter(
-        ((Block.blocker_id == current_user.id) & (Block.blocked_id == friend_id)) |
-        ((Block.blocker_id == friend_id) & (Block.blocked_id == current_user.id))
-    ).first()
-    if block:
-        raise HTTPException(403, "Cannot send messages to this user")
 
     convo = _get_or_create_conversation(db, current_user.id, friend_id)
     message = Message(conversation_id=convo.id, sender_id=current_user.id,

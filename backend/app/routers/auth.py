@@ -72,13 +72,15 @@ async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(
         (func.lower(User.email) == func.lower(payload.identifier)) | 
         (func.lower(User.username) == func.lower(payload.identifier))
     ).first()
-    if not user:
-        raise HTTPException(404, "User not found")
+    
+    response_msg = "If an account exists for that email or username, a reset code has been sent."
+    
+    if user:
+        otp = generate_otp()
+        store_otp(user.email, otp)
+        await send_otp_email(user.email, otp)
         
-    otp = generate_otp()
-    store_otp(user.email, otp)
-    await send_otp_email(user.email, otp)
-    return {"message": "A password reset code has been sent to your email", "email": user.email}
+    return {"message": response_msg}
 
 @router.post("/verify-reset-otp")
 def verify_reset_otp(payload: VerifyResetOtpRequest, db: Session = Depends(get_db)):

@@ -15,8 +15,5 @@ class User(Base):
     wallpaper_id = Column(String(50), default="none")
     avatar_url = Column(String(255), nullable=True)
     is_verified = Column(Boolean, default=False)
-    otp_code = Column(String(6), nullable=True)
-    otp_expires_at = Column(TIMESTAMP(timezone=True), nullable=True)
-    otp_attempts = Column(Integer, default=0)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 

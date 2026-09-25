@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.core.deps import get_current_user, get_db
 from app.models.user import User
-from app.schemas.user import UserOut, UserUpdate
+from app.schemas.user import UserOut, UserUpdate, AvatarUploadRequest, AvatarCompleteRequest
 from app.schemas.theme import ThemeUpdate
 from fastapi import HTTPException
 from app.core.config import settings
@@ -55,7 +55,7 @@ def delete_account(current_user: User = Depends(get_current_user), db: Session =
 
 @router.post("/me/avatar/presigned-url")
 def get_avatar_presigned_url(
-    payload: __import__('app.schemas.user', fromlist=['AvatarUploadRequest']).AvatarUploadRequest,
+    payload: AvatarUploadRequest,
     current_user: User = Depends(get_current_user)
 ):
     s3_client = get_s3_client()
@@ -82,7 +82,7 @@ def get_avatar_presigned_url(
 
 @router.post("/me/avatar/complete", response_model=UserOut)
 def complete_avatar_upload(
-    payload: __import__('app.schemas.user', fromlist=['AvatarCompleteRequest']).AvatarCompleteRequest,
+    payload: AvatarCompleteRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -91,6 +91,15 @@ def complete_avatar_upload(
     
     if not settings.r2_public_url:
         raise HTTPException(status_code=501, detail="R2 public URL is not configured")
+
+    s3_client = get_s3_client()
+    if not s3_client:
+        raise HTTPException(status_code=501, detail="R2 storage is not configured on the server")
+        
+    try:
+        s3_client.head_object(Bucket=settings.r2_bucket_name, Key=payload.object_key)
+    except ClientError:
+        raise HTTPException(status_code=400, detail="Avatar image not found in storage")
 
     public_url = f"{settings.r2_public_url}/{payload.object_key}"
     current_user.avatar_url = public_url

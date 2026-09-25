@@ -17,9 +17,7 @@ CREATE TABLE users (
     font_choice     VARCHAR(50)  DEFAULT 'default',
     wallpaper_id    VARCHAR(50)  DEFAULT 'none',
     is_verified     BOOLEAN      DEFAULT FALSE,
-    otp_code        VARCHAR(6),
-    otp_expires_at  TIMESTAMPTZ,
-    otp_attempts    INTEGER      DEFAULT 0,
+
     created_at      TIMESTAMPTZ  DEFAULT CURRENT_TIMESTAMP
 );
 

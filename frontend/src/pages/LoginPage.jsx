@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, Navigate } from "react-router-dom";
 import { login, getMe } from "../services/authService";
 import { useAuth } from "../context/AuthContext";
 import Input from "../components/Input";
@@ -12,11 +12,9 @@ export default function LoginPage() {
   const { loginUser } = useAuth();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (localStorage.getItem("token")) {
-      navigate("/chats", { replace: true });
-    }
-  }, [navigate]);
+  if (localStorage.getItem("token")) {
+    return <Navigate to="/chats" replace />;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();

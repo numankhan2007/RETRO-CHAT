@@ -23,21 +23,24 @@ export function AuthProvider({ children }) {
   const logout = () => { localStorage.removeItem("token"); setUser(null); };
 
   useEffect(() => {
+    if (loading) return;
+    
     if (user?.accent_color) {
       document.documentElement.setAttribute('data-theme', user.accent_color);
       localStorage.setItem('retro_theme', user.accent_color);
-    } else {
+    } else if (!user) {
       document.documentElement.removeAttribute('data-theme');
       localStorage.removeItem('retro_theme');
     }
+    
     if (user?.font_choice) {
       document.documentElement.setAttribute('data-font', user.font_choice);
       localStorage.setItem('retro_font', user.font_choice);
-    } else {
+    } else if (!user) {
       document.documentElement.removeAttribute('data-font');
       localStorage.removeItem('retro_font');
     }
-  }, [user?.accent_color, user?.font_choice]);
+  }, [user, loading]);
 
   return (
     <AuthContext.Provider value={{ user, setUser, loginUser, logout, loading }}>

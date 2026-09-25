@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     r2_secret_access_key: str | None = None
     r2_bucket_name: str | None = None
     r2_public_url: str | None = None
-    redis_url: str = "redis://localhost:6379"
+    redis_url: str
 
     class Config:
         env_file = ".env"

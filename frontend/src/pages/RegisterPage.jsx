@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, Navigate } from "react-router-dom";
 import { register } from "../services/authService";
 import Input from "../components/Input";
 import Button from "../components/Button";
@@ -10,11 +10,9 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (localStorage.getItem("token")) {
-      navigate("/chats", { replace: true });
-    }
-  }, [navigate]);
+  if (localStorage.getItem("token")) {
+    return <Navigate to="/chats" replace />;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();

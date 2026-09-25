@@ -33,9 +33,36 @@ app.add_middleware(
 
 from app.routers import auth, friends, chat, blog, users, notifications, blocks, group
 
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from fastapi import Depends, HTTPException
+from app.db.database import get_db
+from app.services.redis_service import redis_client
+import redis
+
 @app.get("/health")
-def health_check():
-    return {"status": "ok"}
+def health_check(db: Session = Depends(get_db)):
+    health_status = {"status": "ok"}
+    
+    # Check DB
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception:
+        health_status["status"] = "error"
+        health_status["db"] = "unreachable"
+        
+    # Check Redis
+    if redis_client:
+        try:
+            redis_client.ping()
+        except redis.exceptions.RedisError:
+            health_status["status"] = "error"
+            health_status["redis"] = "unreachable"
+            
+    if health_status["status"] == "error":
+        raise HTTPException(status_code=503, detail=health_status)
+        
+    return health_status
 
 app.include_router(auth.router)
 app.include_router(friends.router)

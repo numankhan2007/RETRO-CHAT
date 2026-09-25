@@ -64,6 +64,7 @@ export default function BlogFeedPage() {
           setPosts(res.data);
           if (res.data.length < 20) setHasMore(false);
         })
+        .catch(err => console.error("Failed to fetch posts:", err))
         .finally(() => setLoading(false));
     }
   }, [tab]);
