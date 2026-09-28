@@ -1,9 +1,11 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { ChatSocketProvider } from "./context/ChatSocketContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Layout from "./components/Layout";
 
+// Statically import core unauthenticated pages
 import LandingPage from "./pages/LandingPage";
 import RegisterPage from "./pages/RegisterPage";
 import VerifyOtpPage from "./pages/VerifyOtpPage";
@@ -11,26 +13,35 @@ import LoginPage from "./pages/LoginPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import VerifyResetOtpPage from "./pages/VerifyResetOtpPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
-import ChatsListPage from "./pages/ChatsListPage";
-import ChatsLayout from "./pages/ChatsLayout";
-import ConversationPage from "./pages/ConversationPage";
-import BlogFeedPage from "./pages/BlogFeedPage";
-import CreatePostPage from "./pages/CreatePostPage";
-import EditPostPage from "./pages/EditPostPage";
-import PostDetailPage from "./pages/PostDetailPage";
-import FriendsPage from "./pages/FriendsPage";
-import SettingsPage from "./pages/SettingsPage";
-import AppearanceSettingsPage from "./pages/AppearanceSettingsPage";
-import BlockedUsersPage from "./pages/BlockedUsersPage";
-import ProfilePage from "./pages/ProfilePage";
-import AccountSettingsPage from "./pages/AccountSettingsPage";
-import AboutPage from "./pages/AboutPage";
-import TermsPage from "./pages/TermsPage";
-import HelpPage from "./pages/HelpPage";
-import NotificationSettingsPage from "./pages/NotificationSettingsPage";
+
+// Lazy load protected pages
+const ChatsLayout = lazy(() => import("./pages/ChatsLayout"));
+const ConversationPage = lazy(() => import("./pages/ConversationPage"));
+const BlogFeedPage = lazy(() => import("./pages/BlogFeedPage"));
+const CreatePostPage = lazy(() => import("./pages/CreatePostPage"));
+const EditPostPage = lazy(() => import("./pages/EditPostPage"));
+const PostDetailPage = lazy(() => import("./pages/PostDetailPage"));
+const FriendsPage = lazy(() => import("./pages/FriendsPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const AppearanceSettingsPage = lazy(() => import("./pages/AppearanceSettingsPage"));
+const BlockedUsersPage = lazy(() => import("./pages/BlockedUsersPage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const AccountSettingsPage = lazy(() => import("./pages/AccountSettingsPage"));
+const AboutPage = lazy(() => import("./pages/AboutPage"));
+const TermsPage = lazy(() => import("./pages/TermsPage"));
+const HelpPage = lazy(() => import("./pages/HelpPage"));
+const NotificationSettingsPage = lazy(() => import("./pages/NotificationSettingsPage"));
 
 function Protected({ children }) {
-  return <ProtectedRoute><Layout>{children}</Layout></ProtectedRoute>;
+  return (
+    <ProtectedRoute>
+      <Layout>
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center p-8 text-ink-muted">Loading...</div>}>
+          {children}
+        </Suspense>
+      </Layout>
+    </ProtectedRoute>
+  );
 }
 
 export default function App() {

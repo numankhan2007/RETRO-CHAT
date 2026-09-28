@@ -1,9 +1,13 @@
-from sqlalchemy import Column, Integer, String, TIMESTAMP, ForeignKey, func, Boolean
+from sqlalchemy import Column, Integer, String, TIMESTAMP, ForeignKey, func, Boolean, Index
 from sqlalchemy.orm import relationship
 from app.db.database import Base
 
 class Message(Base):
     __tablename__ = "messages"
+    __table_args__ = (
+        Index("ix_messages_conversation_sent_at", "conversation_id", "sent_at"),
+        Index("ix_messages_group_sent_at", "group_id", "sent_at"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     conversation_id = Column(Integer, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=True, index=True)

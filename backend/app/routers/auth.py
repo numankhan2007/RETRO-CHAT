@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 MAX_OTP_ATTEMPTS = 5
 
 @router.post("/register", response_model=UserOut, status_code=201)
-async def register(payload: UserRegister, db: Session = Depends(get_db)):
+def register(payload: UserRegister, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     if db.query(User).filter(func.lower(User.email) == func.lower(payload.email)).first():
         raise HTTPException(400, "Email already registered")
     if db.query(User).filter(func.lower(User.username) == func.lower(payload.username)).first():
@@ -34,7 +34,7 @@ async def register(payload: UserRegister, db: Session = Depends(get_db)):
     db.refresh(user)
     
     store_otp(user.email, otp)
-    await send_otp_email(payload.email, otp)
+    background_tasks.add_task(send_otp_email, payload.email, otp)
     return user
 
 @router.post("/verify-otp")
@@ -54,7 +54,7 @@ class ResendOTPRequest(BaseModel):
     email: EmailStr
 
 @router.post("/resend-otp")
-async def resend_otp(payload: ResendOTPRequest, db: Session = Depends(get_db)):
+def resend_otp(payload: ResendOTPRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     user = db.query(User).filter(func.lower(User.email) == func.lower(payload.email)).first()
     if not user:
         raise HTTPException(404, "User not found")
@@ -63,11 +63,11 @@ async def resend_otp(payload: ResendOTPRequest, db: Session = Depends(get_db)):
 
     otp = generate_otp()
     store_otp(user.email, otp)
-    await send_otp_email(payload.email, otp)
+    background_tasks.add_task(send_otp_email, payload.email, otp)
     return {"message": "A new verification code has been sent"}
 
 @router.post("/forgot-password")
-async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+def forgot_password(payload: ForgotPasswordRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     user = db.query(User).filter(
         (func.lower(User.email) == func.lower(payload.identifier)) | 
         (func.lower(User.username) == func.lower(payload.identifier))
@@ -78,7 +78,7 @@ async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(
     if user:
         otp = generate_otp()
         store_otp(user.email, otp)
-        await send_otp_email(user.email, otp)
+        background_tasks.add_task(send_otp_email, user.email, otp)
         
     return {"message": response_msg}
 

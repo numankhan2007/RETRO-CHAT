@@ -4,23 +4,43 @@ import { getMe } from "../services/authService";
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(() => {
+    try {
+      const cached = localStorage.getItem("user_cache");
+      return cached ? JSON.parse(cached) : null;
+    } catch { return null; }
+  });
+  const [loading, setLoading] = useState(() => {
+    // If we have a cached user and token, we don't need to block render
+    return !(localStorage.getItem("user_cache") && localStorage.getItem("token"));
+  });
 
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) { setLoading(false); return; }
     getMe()
-      .then((res) => setUser(res.data))
-      .catch(() => localStorage.removeItem("token"))
+      .then((res) => {
+        setUser(res.data);
+        localStorage.setItem("user_cache", JSON.stringify(res.data));
+      })
+      .catch(() => {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user_cache");
+        setUser(null);
+      })
       .finally(() => setLoading(false));
   }, []);
 
   const loginUser = (token, userData) => {
     localStorage.setItem("token", token);
+    localStorage.setItem("user_cache", JSON.stringify(userData));
     setUser(userData);
   };
-  const logout = () => { localStorage.removeItem("token"); setUser(null); };
+  const logout = () => { 
+    localStorage.removeItem("token"); 
+    localStorage.removeItem("user_cache"); 
+    setUser(null); 
+  };
 
   useEffect(() => {
     if (loading) return;
@@ -42,8 +62,17 @@ export function AuthProvider({ children }) {
     }
   }, [user, loading]);
 
+  const setAndCacheUser = (newUser) => {
+    setUser(newUser);
+    if (newUser) {
+      localStorage.setItem("user_cache", JSON.stringify(newUser));
+    } else {
+      localStorage.removeItem("user_cache");
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, setUser, loginUser, logout, loading }}>
+    <AuthContext.Provider value={{ user, setUser: setAndCacheUser, loginUser, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );

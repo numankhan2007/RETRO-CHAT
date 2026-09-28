@@ -39,12 +39,7 @@ export default function NotificationBell() {
     return () => clearInterval(interval);
   }, [user]);
 
-  useEffect(() => {
-    if (lastMessage && lastMessage.type === "new_message") {
-      // Re-fetch to get accurate unread counts when a message arrives
-      fetchNotifications();
-    }
-  }, [lastMessage]);
+
 
   const handleClose = async () => {
     setOpen(false);

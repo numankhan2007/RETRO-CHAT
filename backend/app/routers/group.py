@@ -1,7 +1,7 @@
 from datetime import datetime
 import uuid
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
 from botocore.exceptions import ClientError
@@ -50,12 +50,18 @@ def create_group(payload: GroupCreate, current_user: User = Depends(get_current_
         db.add(member)
     
     db.commit()
-    db.refresh(group)
+    group = db.query(Group).options(
+        selectinload(Group.members).selectinload(GroupMember.user)
+    ).filter(Group.id == group.id).first()
     return group
+
+from sqlalchemy.orm import selectinload
 
 @router.get("/{group_id}", response_model=GroupOut)
 def get_group(group_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    group = db.query(Group).filter(Group.id == group_id).first()
+    group = db.query(Group).options(
+        selectinload(Group.members).selectinload(GroupMember.user)
+    ).filter(Group.id == group_id).first()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
     
@@ -73,7 +79,9 @@ def _verify_admin(db: Session, group_id: int, user_id: int):
 
 @router.patch("/{group_id}", response_model=GroupOut)
 def update_group(group_id: int, payload: GroupUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    group = db.query(Group).filter(Group.id == group_id).first()
+    group = db.query(Group).options(
+        selectinload(Group.members).selectinload(GroupMember.user)
+    ).filter(Group.id == group_id).first()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
     
@@ -88,7 +96,9 @@ def update_group(group_id: int, payload: GroupUpdate, current_user: User = Depen
 
 @router.post("/{group_id}/members/{user_id}", response_model=GroupOut)
 def add_member(group_id: int, user_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    group = db.query(Group).filter(Group.id == group_id).first()
+    group = db.query(Group).options(
+        selectinload(Group.members).selectinload(GroupMember.user)
+    ).filter(Group.id == group_id).first()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
         
@@ -216,7 +226,9 @@ def complete_group_avatar_upload(
 
     public_url = f"{settings.r2_public_url}/{payload.object_key}"
     
-    group = db.query(Group).filter(Group.id == group_id).first()
+    group = db.query(Group).options(
+        selectinload(Group.members).selectinload(GroupMember.user)
+    ).filter(Group.id == group_id).first()
     group.avatar_url = public_url
     db.commit()
     db.refresh(group)
@@ -242,7 +254,7 @@ def get_group_messages(group_id: int, cursor: Optional[datetime] = Query(None), 
     return messages
 
 @router.post("/{group_id}/messages", response_model=MessageOut, status_code=201)
-async def send_group_message(group_id: int, payload: MessageCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def send_group_message(group_id: int, payload: MessageCreate, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     group = db.query(Group).filter(Group.id == group_id).first()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
@@ -268,6 +280,6 @@ async def send_group_message(group_id: int, payload: MessageCreate, current_user
     # Broadcast to all members
     members = db.query(GroupMember).filter(GroupMember.group_id == group_id).all()
     for m in members:
-        await manager.send_to_user(m.user_id, ws_payload)
+        background_tasks.add_task(manager.send_to_user, m.user_id, ws_payload)
         
     return MessageOut.model_validate(message)

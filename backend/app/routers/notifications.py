@@ -13,7 +13,7 @@ def get_notifications(current_user: User = Depends(get_current_user), db: Sessio
     notifs = db.query(Notification).filter(
         Notification.user_id == current_user.id,
         Notification.is_read == False
-    ).order_by(Notification.created_at.desc()).all()
+    ).order_by(Notification.created_at.desc()).limit(50).all()
     
     if not notifs:
         return []

@@ -1,8 +1,8 @@
 from datetime import datetime
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Request, Body, Query
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Request, Body, Query, BackgroundTasks
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_, func
+from sqlalchemy import or_, and_, func, text
 
 from app.core.deps import get_current_user, get_current_user_ws, get_db
 from app.core.ws_manager import manager
@@ -32,7 +32,7 @@ from app.models.group import Group
 from app.models.group_member import GroupMember
 
 @router.get("/conversations", response_model=list[ConversationOut])
-async def list_conversations(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_conversations(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     result = []
     
     # --- 1-ON-1 CONVERSATIONS ---
@@ -54,10 +54,26 @@ async def list_conversations(current_user: User = Depends(get_current_user), db:
         last_messages = db.query(Message).join(last_msgs_subq, and_(Message.conversation_id == last_msgs_subq.c.conversation_id, Message.sent_at == last_msgs_subq.c.max_sent)).all()
         last_messages_dict = {m.conversation_id: m for m in last_messages}
 
-        receipts = db.query(ReadReceipt).filter(ReadReceipt.user_id == current_user.id, ReadReceipt.conversation_id.in_(convo_ids)).all()
-        receipts_dict = {r.conversation_id: r for r in receipts}
-        last_read_msg_ids = [r.last_read_message_id for r in receipts if r.last_read_message_id]
-        last_read_msgs = {m.id: m for m in db.query(Message).filter(Message.id.in_(last_read_msg_ids)).all()} if last_read_msg_ids else {}
+
+
+        # Batched unread counts query
+        unread_counts_dict = {}
+        if convo_ids:
+            unread_counts_query = text("""
+                SELECT m.conversation_id, COUNT(m.id) as unread_count
+                FROM messages m
+                LEFT JOIN conversation_read_receipts r ON r.conversation_id = m.conversation_id AND r.user_id = :user_id
+                LEFT JOIN messages rm ON rm.id = r.last_read_message_id
+                WHERE m.conversation_id = ANY(:convo_ids)
+                  AND m.sender_id != :user_id
+                  AND (r.id IS NULL OR m.sent_at > rm.sent_at)
+                GROUP BY m.conversation_id
+            """)
+            unread_counts_res = db.execute(unread_counts_query, {"user_id": current_user.id, "convo_ids": convo_ids}).fetchall()
+            unread_counts_dict = {row[0]: row[1] for row in unread_counts_res}
+
+        # Batched online status check using sync method
+        online_statuses = manager.are_online_sync(list(friends_dict.keys()))
 
         for c in convos:
             friend_id = c.user_b_id if c.user_a_id == current_user.id else c.user_a_id
@@ -65,22 +81,9 @@ async def list_conversations(current_user: User = Depends(get_current_user), db:
             if not friend: continue
 
             last_msg = last_messages_dict.get(c.id)
-            receipt = receipts_dict.get(c.id)
-            last_read_msg = last_read_msgs.get(receipt.last_read_message_id) if receipt and receipt.last_read_message_id else None
-            
-            if not receipt or not receipt.last_read_message_id:
-                unread_count = db.query(func.count(Message.id)).filter(
-                    Message.conversation_id == c.id, 
-                    Message.sender_id == friend_id
-                ).scalar() or 0
-            else:
-                unread_count = db.query(func.count(Message.id)).filter(
-                    Message.conversation_id == c.id,
-                    Message.sender_id == friend_id,
-                    Message.sent_at > last_read_msg.sent_at if last_read_msg else True
-                ).scalar() or 0
+            unread_count = unread_counts_dict.get(c.id, 0)
+            is_online = online_statuses.get(friend.id, False)
 
-            is_online = await manager.is_online(friend.id)
             a, b = sorted([current_user.id, friend_id])
             friendship = friendships_dict.get((a, b))
             is_muted = friendship.user_a_muted if friendship and friendship.user_a_id == current_user.id else (friendship.user_b_muted if friendship else False)
@@ -152,7 +155,7 @@ def get_messages(friend_id: int, cursor: Optional[datetime] = Query(None), limit
 
 @router.post("/conversations/{friend_id}/messages", response_model=MessageOut, status_code=201)
 @limiter.limit("60/minute")
-async def send_message(request: Request, friend_id: int, payload: MessageCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def send_message(request: Request, friend_id: int, payload: MessageCreate, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not are_friends(db, current_user.id, friend_id):
         raise HTTPException(403, "You can only message friends")
 
@@ -165,13 +168,13 @@ async def send_message(request: Request, friend_id: int, payload: MessageCreate,
     db.refresh(message)
 
     message_out = MessageOut.model_validate(message).model_dump(mode="json")
-    payload = {"type": "new_message", "conversation_id": convo.id, "message": message_out}
-    await manager.send_to_user(friend_id, payload)
-    await manager.send_to_user(current_user.id, payload)
+    ws_payload = {"type": "new_message", "conversation_id": convo.id, "message": message_out}
+    background_tasks.add_task(manager.send_to_user, friend_id, ws_payload)
+    background_tasks.add_task(manager.send_to_user, current_user.id, ws_payload)
     return MessageOut.model_validate(message)
 
 @router.patch("/conversations/{friend_id}/messages/{message_id}/pin", response_model=MessageOut)
-async def pin_message(friend_id: int, message_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def pin_message(friend_id: int, message_id: int, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not are_friends(db, current_user.id, friend_id):
         raise HTTPException(403, "You can only interact with friends")
     
@@ -191,13 +194,13 @@ async def pin_message(friend_id: int, message_id: int, current_user: User = Depe
     db.refresh(message)
     
     message_out = MessageOut.model_validate(message).model_dump(mode="json")
-    payload = {"type": "update_message", "conversation_id": convo.id, "message": message_out}
-    await manager.send_to_user(friend_id, payload)
-    await manager.send_to_user(current_user.id, payload)
+    ws_payload = {"type": "update_message", "conversation_id": convo.id, "message": message_out}
+    background_tasks.add_task(manager.send_to_user, friend_id, ws_payload)
+    background_tasks.add_task(manager.send_to_user, current_user.id, ws_payload)
     return MessageOut.model_validate(message)
 
 @router.delete("/conversations/{friend_id}/messages/{message_id}")
-async def delete_message(friend_id: int, message_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_message(friend_id: int, message_id: int, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not are_friends(db, current_user.id, friend_id):
         raise HTTPException(403, "You can only interact with friends")
         
@@ -217,15 +220,16 @@ async def delete_message(friend_id: int, message_id: int, current_user: User = D
     
     # Notify update (not deletion) so it updates the UI to show deleted state
     message_out = MessageOut.model_validate(message).model_dump(mode="json")
-    payload = {"type": "update_message", "conversation_id": convo.id, "message": message_out}
-    await manager.send_to_user(friend_id, payload)
-    await manager.send_to_user(current_user.id, payload)
+    ws_payload = {"type": "update_message", "conversation_id": convo.id, "message": message_out}
+    background_tasks.add_task(manager.send_to_user, friend_id, ws_payload)
+    background_tasks.add_task(manager.send_to_user, current_user.id, ws_payload)
     return {"message": "Deleted successfully"}
 
 @router.put("/conversations/{friend_id}/messages/{message_id}", response_model=MessageOut)
-async def edit_message(
+def edit_message(
     friend_id: int, 
     message_id: int, 
+    background_tasks: BackgroundTasks,
     content: str = Body(..., embed=True),
     current_user: User = Depends(get_current_user), 
     db: Session = Depends(get_db)
@@ -250,9 +254,9 @@ async def edit_message(
     db.refresh(message)
     
     message_out = MessageOut.model_validate(message).model_dump(mode="json")
-    payload = {"type": "update_message", "conversation_id": convo.id, "message": message_out}
-    await manager.send_to_user(friend_id, payload)
-    await manager.send_to_user(current_user.id, payload)
+    ws_payload = {"type": "update_message", "conversation_id": convo.id, "message": message_out}
+    background_tasks.add_task(manager.send_to_user, friend_id, ws_payload)
+    background_tasks.add_task(manager.send_to_user, current_user.id, ws_payload)
     return MessageOut.model_validate(message)
 
 @router.post("/conversations/{friend_id}/read", status_code=204)

@@ -105,18 +105,23 @@ export default function ConversationPage() {
     }); 
   }, [targetId, isGroup]);
 
+  const currentConvoIdRef = useRef(null);
+  useEffect(() => {
+    if (messages.length > 0) currentConvoIdRef.current = messages[0].conversation_id;
+  }, [messages]);
+
   useEffect(() => {
     if (!lastMessage) return;
     
     // Determine the current conversation ID if possible
     let isCurrentConvo = false;
     if (isGroup) {
-       isCurrentConvo = String(lastMessage.group_id) === String(targetId);
+       isCurrentConvo = String(lastMessage.group_id || lastMessage.message?.group_id) === String(targetId);
     } else {
-       const currentConvoId = messages.length > 0 ? messages[0].conversation_id : null;
+       const currentConvoId = currentConvoIdRef.current;
        isCurrentConvo = currentConvoId 
          ? String(lastMessage.conversation_id) === String(currentConvoId)
-         : (lastMessage.message && String(lastMessage.message.sender_id) === String(targetId));
+         : (lastMessage.message && (String(lastMessage.message.sender_id) === String(targetId) || String(lastMessage.message.sender_id) === String(currentUser?.id)));
     }
 
     if (!isCurrentConvo) return;
@@ -126,18 +131,19 @@ export default function ConversationPage() {
       setMessages((prev) => {
         const exists = prev.find((m) => m.id === msg.id);
         if (exists) {
+          if (JSON.stringify(exists) === JSON.stringify(msg)) return prev;
           return prev.map((m) => m.id === msg.id ? msg : m);
         }
         return [...prev, msg];
       });
-      if (String(msg.sender_id) !== String(currentUser?.id)) {
+      if (lastMessage.type === "new_message" && String(msg.sender_id) !== String(currentUser?.id)) {
         if (!isGroup) markAsRead(targetId);
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
       }
     } else if (lastMessage.type === "delete_message") {
-      setMessages((prev) => prev.filter((m) => m.id !== lastMessage.id));
+      setMessages((prev) => prev.some((m) => m.id === lastMessage.id) ? prev.filter((m) => m.id !== lastMessage.id) : prev);
     }
-  }, [lastMessage, friendId, messages]);
+  }, [lastMessage, targetId, isGroup, currentUser?.id]);
 
   // Only auto-scroll on new message received or sent, not on older messages loaded
   useEffect(() => {
@@ -373,15 +379,16 @@ export default function ConversationPage() {
       )}
 
       <div className="flex-1 overflow-y-auto px-6 py-6 custom-scrollbar flex flex-col">
-        {messages.map((m, index) => {
+        {messages.slice(-200).map((m, idx) => {
+          const renderedMessages = messages.slice(-200);
+          const isFirstMessage = idx === 0;
+          const index = messages.length > 200 ? messages.length - 200 + idx : idx;
           const isMine = String(m.sender_id) === String(currentUser?.id);
           const replyMsg = m.reply_to_id ? messages.find(msg => msg.id === m.reply_to_id) : null;
           const replyToMessage = replyMsg ? {
             senderName: String(replyMsg.sender_id) === String(currentUser?.id) ? "You" : (membersMap[replyMsg.sender_id]?.name || "Unknown"),
             content: replyMsg.content
           } : null;
-
-          const isFirstMessage = index === 0;
 
           return (
             <div 

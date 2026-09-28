@@ -76,4 +76,28 @@ class ConnectionManager:
             return await self.redis.sismember("online_users", user_id)
         return user_id in self.active_connections and len(self.active_connections[user_id]) > 0
 
+    async def are_online(self, user_ids: list[int]) -> dict[int, bool]:
+        if not user_ids:
+            return {}
+        if self.redis:
+            results = await self.redis.smismember("online_users", user_ids)
+            return {uid: bool(res) for uid, res in zip(user_ids, results)}
+        return {uid: uid in self.active_connections and len(self.active_connections[uid]) > 0 for uid in user_ids}
+
+    def is_online_sync(self, user_id: int) -> bool:
+        from app.services.redis_service import redis_client
+        if redis_client:
+            return redis_client.sismember("online_users", user_id)
+        return user_id in self.active_connections and len(self.active_connections[user_id]) > 0
+
+    def are_online_sync(self, user_ids: list[int]) -> dict[int, bool]:
+        if not user_ids:
+            return {}
+        from app.services.redis_service import redis_client
+        if redis_client:
+            # smismember takes key, *values in the sync client
+            results = redis_client.smismember("online_users", *user_ids)
+            return {uid: bool(res) for uid, res in zip(user_ids, results)}
+        return {uid: uid in self.active_connections and len(self.active_connections[uid]) > 0 for uid in user_ids}
+
 manager = ConnectionManager()

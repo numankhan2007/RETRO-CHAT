@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/core": "^8.5.2",
     "@twemoji/api": "^17.0.3",
     "axios": "^1.19.0",
     "emoji-picker-react": "^4.19.1",
@@ -19,6 +20,8 @@
     "react-router-dom": "^7.18.2"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
     "@vitejs/plugin-react": "^6.0.4",
     "autoprefixer": "^10.5.4",
     "oxlint": "^1.75.0",

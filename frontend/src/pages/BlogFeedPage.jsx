@@ -27,7 +27,7 @@ export default function BlogFeedPage() {
   }, [loading, loadingMore, hasMore]);
 
   const loadMore = () => {
-    if (!hasMore || loadingMore || posts.length === 0) return;
+    if (!hasMore || loadingMore || posts.length === 0 || posts.length >= 200) return;
     setLoadingMore(true);
     const lastPost = posts[posts.length - 1];
     const cursor = lastPost.created_at;

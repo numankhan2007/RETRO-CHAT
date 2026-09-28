@@ -37,19 +37,20 @@ def _get_posts_with_stats_query(db: Session, viewer_id: int):
         Post.author_id == viewer_id
     )
 
+    likes_count_sq = db.query(func.count(PostLike.id)).filter(PostLike.post_id == Post.id).correlate(Post).scalar_subquery()
+    comments_count_sq = db.query(func.count(Comment.id)).filter(Comment.post_id == Post.id).correlate(Post).scalar_subquery()
+    is_liked_sq = exists().where(and_(PostLike.post_id == Post.id, PostLike.user_id == viewer_id)).correlate(Post)
+    is_saved_sq = exists().where(and_(SavedPost.post_id == Post.id, SavedPost.user_id == viewer_id)).correlate(Post)
+
     return db.query(
         Post,
         User,
-        func.count(PostLike.id.distinct()).label('likes_count'),
-        func.count(Comment.id.distinct()).label('comments_count'),
-        func.bool_or(PostLike.user_id == viewer_id).label('is_liked'),
-        func.bool_or(SavedPost.user_id == viewer_id).label('is_saved')
+        likes_count_sq.label('likes_count'),
+        comments_count_sq.label('comments_count'),
+        is_liked_sq.label('is_liked'),
+        is_saved_sq.label('is_saved')
     ).join(User, User.id == Post.author_id)\
-     .outerjoin(PostLike, PostLike.post_id == Post.id)\
-     .outerjoin(Comment, Comment.post_id == Post.id)\
-     .outerjoin(SavedPost, SavedPost.post_id == Post.id)\
-     .filter(~Post.author_id.in_(blocked_user_ids), visibility_filter)\
-     .group_by(Post.id, User.id)
+     .filter(~Post.author_id.in_(blocked_user_ids), visibility_filter)
 
 def _row_to_post_out(row) -> PostOut:
     post, author, likes_count, comments_count, is_liked, is_saved = row
@@ -91,8 +92,7 @@ def my_posts(cursor: Optional[datetime] = Query(None), limit: int = Query(20, le
 
 @router.get("/posts/saved", response_model=list[PostOut])
 def saved_posts(cursor: Optional[datetime] = Query(None), limit: int = Query(20, le=50), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    q = _get_posts_with_stats_query(db, current_user.id).filter(SavedPost.user_id == current_user.id)
-    # We join SavedPost above but the bool_or handles is_saved. Wait, the group_by applies to Post, so filter(SavedPost.user_id == ...) will filter out posts the user didn't save.
+    q = _get_posts_with_stats_query(db, current_user.id).join(SavedPost, SavedPost.post_id == Post.id).filter(SavedPost.user_id == current_user.id)
     if cursor:
         q = q.filter(Post.created_at < cursor)
     rows = q.order_by(Post.created_at.desc()).limit(limit).all()

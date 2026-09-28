@@ -1,8 +1,11 @@
-from sqlalchemy import Column, Integer, String, Text, TIMESTAMP, ForeignKey, func
+from sqlalchemy import Column, Integer, String, Text, TIMESTAMP, ForeignKey, func, Index
 from app.db.database import Base
 
 class Post(Base):
     __tablename__ = "posts"
+    __table_args__ = (
+        Index("ix_posts_author_created_at", "author_id", "created_at"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     author_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)

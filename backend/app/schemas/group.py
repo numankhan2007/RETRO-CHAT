@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Optional, List
+from pydantic import BaseModel, model_validator
+from typing import Optional, List, Any
 from datetime import datetime
 
 class GroupMemberOut(BaseModel):
@@ -8,6 +8,19 @@ class GroupMemberOut(BaseModel):
     name: str
     avatar_url: Optional[str] = None
     role: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def flatten_user(cls, data: Any):
+        if hasattr(data, "user") and data.user:
+            return {
+                "user_id": data.user_id,
+                "role": data.role,
+                "username": data.user.username,
+                "name": data.user.name,
+                "avatar_url": data.user.avatar_url
+            }
+        return data
 
     class Config:
         from_attributes = True
