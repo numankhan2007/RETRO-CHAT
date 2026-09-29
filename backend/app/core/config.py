@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24
     smtp_host: str
-    smtp_port: int = 587
+    smtp_port: int = 465
     smtp_username: str
     smtp_password: str
     frontend_origin: str = "http://localhost:5173"

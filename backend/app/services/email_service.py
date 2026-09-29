@@ -9,8 +9,8 @@ conf = ConnectionConfig(
     MAIL_FROM=settings.smtp_username,
     MAIL_PORT=settings.smtp_port,
     MAIL_SERVER=settings.smtp_host,
-    MAIL_STARTTLS=True,
-    MAIL_SSL_TLS=False,
+    MAIL_STARTTLS=False,
+    MAIL_SSL_TLS=True,
     USE_CREDENTIALS=True,
 )
 
