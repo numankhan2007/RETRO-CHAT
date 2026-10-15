@@ -13,10 +13,15 @@ class ConnectionManager:
 
     async def connect_redis(self):
         if settings.redis_url and self.redis is None:
-            self.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-            self.pubsub = self.redis.pubsub()
-            await self.pubsub.subscribe(self.channel_name)
-            asyncio.create_task(self._listen_to_redis())
+            try:
+                self.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+                self.pubsub = self.redis.pubsub()
+                await self.pubsub.subscribe(self.channel_name)
+                asyncio.create_task(self._listen_to_redis())
+            except Exception as e:
+                print(f"Warning: Failed to connect Redis PubSub in WebSocket manager: {e}")
+                self.redis = None
+                self.pubsub = None
 
     async def _listen_to_redis(self):
         if not self.pubsub:

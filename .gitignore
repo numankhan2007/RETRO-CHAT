@@ -78,3 +78,14 @@ Thumbs.db
 backend/logs/
 *.log
 iris.tar.gz
+
+# Documentation build outputs and report artifacts
+DOCUMENTATION/*.pdf
+DOCUMENTATION/*.html
+DOCUMENTATION/*.svg
+DOCUMENTATION/generate_report.py
+DOCUMENTATION/SCREENSHOT's/*
+!DOCUMENTATION/SCREENSHOT's/Login-page.png
+!DOCUMENTATION/SCREENSHOT's/Register-page.png
+!DOCUMENTATION/SCREENSHOT's/Retro-Chat.png
+

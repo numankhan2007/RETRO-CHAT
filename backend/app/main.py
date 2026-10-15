@@ -55,9 +55,10 @@ def health_check(db: Session = Depends(get_db)):
     if redis_client:
         try:
             redis_client.ping()
-        except redis.exceptions.RedisError:
-            health_status["status"] = "error"
-            health_status["redis"] = "unreachable"
+        except Exception:
+            health_status["redis"] = "degraded"
+    else:
+        health_status["redis"] = "in-memory-fallback"
             
     if health_status["status"] == "error":
         raise HTTPException(status_code=503, detail=health_status)

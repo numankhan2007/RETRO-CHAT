@@ -1,4 +1,8 @@
-from pydantic_settings import BaseSettings
+import os
+from pathlib import Path
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 class Settings(BaseSettings):
     database_url: str
@@ -15,9 +19,12 @@ class Settings(BaseSettings):
     r2_secret_access_key: str | None = None
     r2_bucket_name: str | None = None
     r2_public_url: str | None = None
-    redis_url: str
+    redis_url: str | None = None
 
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(
+        env_file=[str(BASE_DIR / ".env"), ".env"],
+        extra="ignore"
+    )
 
 settings = Settings()
+

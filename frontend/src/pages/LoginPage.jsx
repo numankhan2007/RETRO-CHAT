@@ -37,7 +37,22 @@ export default function LoginPage() {
           <img src="/logo.svg" alt="Retro Chat Logo" className="w-16 h-16 mb-2" />
           <h1 className="font-display font-bold text-2xl text-center">RETRO CHAT</h1>
         </div>
-        {error && <Alert type="error">{error}</Alert>}
+        {error && (
+          <Alert type="error">
+            <div>{error}</div>
+            {error.toLowerCase().includes("verify your email") && (
+              <div className="mt-2 text-xs">
+                <Link
+                  to="/verify-otp"
+                  state={{ email: form.identifier.includes("@") ? form.identifier : "" }}
+                  className="underline font-bold hover:text-ink"
+                >
+                  Click here to enter your verification code
+                </Link>
+              </div>
+            )}
+          </Alert>
+        )}
         <Input label="Email or Username" required value={form.identifier} onChange={(e) => setForm({ ...form, identifier: e.target.value })} />
         <Input label="Password" type="password" required value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
         <Button type="submit">Log In</Button>
