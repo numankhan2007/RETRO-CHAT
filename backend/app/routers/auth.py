@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+import logging
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -11,12 +12,14 @@ from app.services.redis_service import store_otp, verify_and_consume_otp, clear_
 from app.schemas.user import UserRegister, UserLogin, OTPVerify, UserOut, ForgotPasswordRequest, VerifyResetOtpRequest, ResetPasswordRequest
 from app.schemas.token import Token
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 MAX_OTP_ATTEMPTS = 5
 
 @router.post("/register", response_model=UserOut, status_code=201)
-def register(payload: UserRegister, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def register(payload: UserRegister, db: Session = Depends(get_db)):
     if payload.password != payload.confirm_password:
         raise HTTPException(400, "Passwords do not match")
 
@@ -64,7 +67,11 @@ def register(payload: UserRegister, background_tasks: BackgroundTasks, db: Sessi
         db.rollback()
         raise HTTPException(500, "Failed to initialize registration verification")
 
-    background_tasks.add_task(send_otp_email, payload.email, otp)
+    try:
+        await send_otp_email(user.email, otp)
+    except Exception:
+        clear_otp(user.email)
+        raise HTTPException(503, "Verification email could not be sent. Please retry registration or use resend.")
     return user
 
 @router.post("/verify-otp")
@@ -84,7 +91,7 @@ class ResendOTPRequest(BaseModel):
     email: EmailStr
 
 @router.post("/resend-otp")
-def resend_otp(payload: ResendOTPRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def resend_otp(payload: ResendOTPRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(func.lower(User.email) == func.lower(payload.email.strip())).first()
     if not user:
         raise HTTPException(404, "User not found")
@@ -93,11 +100,15 @@ def resend_otp(payload: ResendOTPRequest, background_tasks: BackgroundTasks, db:
 
     otp = generate_otp()
     store_otp(user.email, otp)
-    background_tasks.add_task(send_otp_email, user.email, otp)
+    try:
+        await send_otp_email(user.email, otp)
+    except Exception:
+        clear_otp(user.email)
+        raise HTTPException(503, "Verification email could not be sent. Please try again shortly.")
     return {"message": "A new verification code has been sent"}
 
 @router.post("/forgot-password")
-def forgot_password(payload: ForgotPasswordRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(
         (func.lower(User.email) == func.lower(payload.identifier)) | 
         (func.lower(User.username) == func.lower(payload.identifier))
@@ -108,8 +119,12 @@ def forgot_password(payload: ForgotPasswordRequest, background_tasks: Background
     if user:
         otp = generate_otp()
         store_otp(user.email, otp)
-        background_tasks.add_task(send_otp_email, user.email, otp)
-        
+        try:
+            await send_otp_email(user.email, otp)
+        except Exception:
+            clear_otp(user.email)
+            logger.warning("Password reset email delivery failed for an account; returning generic response.")
+
     return {"message": response_msg}
 
 @router.post("/verify-reset-otp")
