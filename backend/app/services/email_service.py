@@ -1,63 +1,89 @@
 import logging
 import secrets
 
-from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
+import httpx
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
-
-# Port 465 uses implicit TLS; port 587 uses STARTTLS.
-smtp_port = settings.smtp_port
-conf = ConnectionConfig(
-    MAIL_USERNAME=settings.smtp_username,
-    MAIL_PASSWORD=settings.smtp_password,
-    MAIL_FROM=settings.smtp_username,
-    MAIL_PORT=smtp_port,
-    MAIL_SERVER=settings.smtp_host,
-    MAIL_STARTTLS=(smtp_port == 587),
-    MAIL_SSL_TLS=(smtp_port == 465),
-    USE_CREDENTIALS=True,
-    VALIDATE_CERTS=True,
-)
+RESEND_ENDPOINT = "https://api.resend.com/emails"
 
 def generate_otp() -> str:
-    """Generate a zero-padded, cryptographically secure six-digit OTP."""
+    """Generate a cryptographically secure, zero-padded six-digit OTP."""
     return f"{secrets.randbelow(1_000_000):06d}"
 
-async def send_otp_email(email: str, otp: str):
-    html_content = f"""
-    <!DOCTYPE html>
+def _otp_html(otp: str) -> str:
+    return f"""
+    <!doctype html>
     <html>
-    <head>
-        <style>
-            body {{ background-color: #0d1117; color: #ffffff; font-family: 'Courier New', Courier, monospace; padding: 40px; text-align: center; }}
-            .container {{ max-width: 600px; margin: 0 auto; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 40px; border-radius: 12px; border: 1px solid #00ffcc; }}
-            .logo {{ font-size: 32px; font-weight: bold; color: #00ffcc; margin-bottom: 20px; }}
-            .otp-box {{ background: #000; border: 2px dashed #ff0055; padding: 20px; font-size: 48px; letter-spacing: 10px; font-weight: bold; color: #ff0055; margin: 30px 0; border-radius: 8px; }}
-            .footer {{ margin-top: 30px; font-size: 12px; color: #888; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="logo">RETRO CHAT</div>
-            <p>Your email verification code is:</p>
-            <div class="otp-box">{otp}</div>
-            <p>This code expires in 10 minutes. Do not share it with anyone.</p>
-            <div class="footer">Stay Retro. | Retro Chat System</div>
+      <body style="margin:0;padding:32px;background:#0d1117;color:#fff;font-family:Arial,sans-serif">
+        <div style="max-width:560px;margin:0 auto;padding:32px;border:1px solid #00ffcc;border-radius:12px;background:#161b2e;text-align:center">
+          <h1 style="color:#00ffcc;margin-top:0">RETRO CHAT</h1>
+          <p>Your email verification code is:</p>
+          <div style="margin:28px 0;padding:18px;background:#000;border:2px dashed #ff0055;border-radius:8px;color:#ff0055;font-size:42px;letter-spacing:8px;font-weight:bold">{otp}</div>
+          <p>This code expires in 10 minutes. Do not share it with anyone.</p>
+          <p style="margin-top:28px;color:#aaa;font-size:12px">Stay Retro. | Retro Chat System</p>
         </div>
-    </body>
+      </body>
     </html>
     """
-    message = MessageSchema(
-        subject="Your Retro Chat Verification Code",
-        recipients=[email],
-        body=html_content,
-        subtype=MessageType.html,
-    )
+
+async def send_otp_email(email: str, otp: str):
+    """
+    Send OTP through Resend's HTTPS API. Do not use direct SMTP by default:
+    the deployed Render Free service times out connecting to SMTP port 465.
+    Configure RESEND_API_KEY and EMAIL_FROM in the Render environment.
+    """
+    provider = (settings.email_provider or "resend").strip().lower()
+    if provider != "resend":
+        raise RuntimeError(
+            f"Unsupported EMAIL_PROVIDER '{provider}'. This deployment supports 'resend'."
+        )
+
+    api_key = (settings.resend_api_key or "").strip()
+    sender = (settings.email_from or "").strip()
+    if not api_key:
+        logger.error("Resend email provider is not configured: RESEND_API_KEY is missing")
+        raise RuntimeError("Email delivery is not configured: missing RESEND_API_KEY")
+    if not sender:
+        logger.error("Resend email provider is not configured: EMAIL_FROM is missing")
+        raise RuntimeError("Email delivery is not configured: missing EMAIL_FROM sender address")
+
+    payload = {
+        "from": sender,
+        "to": [email],
+        "subject": "Your Retro Chat Verification Code",
+        "html": _otp_html(otp),
+        "text": f"Your Retro Chat verification code is {otp}. It expires in 10 minutes. Do not share it.",
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
     try:
-        await FastMail(conf).send_message(message)
-    except Exception:
-        # Never log credentials, OTPs, or message bodies.
-        logger.exception("OTP email delivery failed (recipient=%s, host=%s, port=%s)",
-                         email, settings.smtp_host, settings.smtp_port)
-        raise
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(15.0, connect=5.0),
+            follow_redirects=False,
+        ) as client:
+            response = await client.post(RESEND_ENDPOINT, headers=headers, json=payload)
+    except httpx.TimeoutException as exc:
+        logger.warning("Resend API request timed out while sending OTP (recipient=%s)", email)
+        raise RuntimeError("Email provider timed out. Please try again shortly.") from exc
+    except httpx.RequestError as exc:
+        logger.warning("Could not connect to Resend API while sending OTP (recipient=%s)", email)
+        raise RuntimeError("Email provider is temporarily unreachable.") from exc
+
+    if not response.is_success:
+        # Do not log the API key, OTP, request body, or provider response body.
+        logger.error("Resend rejected OTP email (HTTP %s, recipient=%s)", response.status_code, email)
+        raise RuntimeError(
+            f"Email provider rejected the request (HTTP {response.status_code}); "
+            "check the API key, sending permissions, and verified sender domain."
+        )
+
+    try:
+        message_id = response.json().get("id")
+    except ValueError:
+        message_id = None
+    logger.info("OTP email accepted by Resend (recipient=%s, message_id=%s)",
+                email, message_id or "unavailable")

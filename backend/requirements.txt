@@ -12,3 +12,4 @@ slowapi
 boto3
 gunicorn
 redis
+httpx
